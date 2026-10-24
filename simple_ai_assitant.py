@@ -13,23 +13,31 @@ client = OpenAI(
 )
 
 
-
+context_window = []
 while True:
 
     msg = input("you : ")
 
-    if msg in ["bye", "exit"]:
+    if msg.lower() in ["bye", "exit"]:
         break
+
+    context_window.append(
+         {
+        "role":"user",
+        "content":msg
+      }
+    )
 
     response = client.chat.completions.create(
         model=os.getenv("MODEL"),
-        messages=[
-            {
-                "role": "user",
-                "content": msg
-            }
-        ]
+        messages=context_window
     )
-    
+ 
+    context_window.append(
+         {
+        "role":"assistant",
+        "content":response.choices[0].message.content
+     }
+    )
     print( "assistant : " + response.choices[0].message.content)
 

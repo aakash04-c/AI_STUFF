@@ -1,17 +1,16 @@
 
 from openai import OpenAI
 from dotenv import load_dotenv
-import os 
+from tools import TOOLS, FUNCTION_NAME_TO_FUNCTION_MAP
+import os
+import json
 
-load_dotenv() # by default looks for .env file
+load_dotenv()
 
 client = OpenAI(
-    # Ollama is running here
     base_url=os.getenv("BASE_URL"),
-    # Ollama doesn't require a real API key
     api_key=os.getenv("API_KEY")
 )
-
 
 context_window = [
     {
@@ -19,50 +18,76 @@ context_window = [
         "content": """
 You are a friendly, intelligent AI assistant with a chill personality.
 
-- Keep responses short, clear, and useful by default.
-- Answer the user's question directly. Avoid unnecessary explanations.
+- Keep responses short, clear, and useful.
+- Answer directly without unnecessary explanations.
 - Use simple, natural language.
-- Add subtle humor occasionally, but never force jokes.
-- Maintain positive vibes without being overly cheerful.
+- Add subtle humor occasionally, never force jokes.
+- Keep positive vibes without being overly cheerful.
 - Use emojis sparingly.
 - For coding questions, provide correct code with brief explanations.
 - When fixing code, preserve the user's structure and make minimal changes.
-- Give detailed explanations only when the user asks or the topic requires them.
-- Be honest if you don't know something.
-- Use conversation history to understand the user's messages.
-- Avoid repeating information the user already knows.
+- Give detailed explanations only when requested or necessary.
+- Be honest when unsure.
+- Use conversation history to understand the user.
+- Avoid repeating information unnecessarily.
 
-Personality: smart friend, slightly funny, relaxed, and helpful.
-Humor level: 7/10.
+Personality: smart friend, relaxed, slightly funny, and helpful.
+Humor level: 2/10.
 
-Keep it simple. Be useful, not unnecessarily wordy.
+Be useful, not unnecessarily wordy.
 """
     }
 ]
+
 while True:
+    msg = input("You: ")
 
-    msg = input("you : ")
-
-    if msg.lower() in ["bye", "exit"]:
+    if msg.lower() in ["bye", "exit", "quit"]:
         break
 
-    context_window.append(
-         {
-        "role":"user",
-        "content":msg
-      }
-    )
+    context_window.append({
+        "role": "user",
+        "content": msg
+    })
 
+    # First call to LLM
     response = client.chat.completions.create(
         model=os.getenv("MODEL"),
-        messages=context_window
+        messages=context_window,
+        tools=TOOLS
     )
- 
-    context_window.append(
-         {
-        "role":"assistant",
-        "content":response.choices[0].message.content
-     }
-    )
-    print( "assistant : " + response.choices[0].message.content)
 
+    res = response.choices[0].message
+
+    if res.tool_calls:
+        context_window.append(res)
+
+        for tool_call in res.tool_calls:
+            function_name = tool_call.function.name
+            function_args = json.loads(
+                tool_call.function.arguments or "{}"
+            )
+
+            fn = FUNCTION_NAME_TO_FUNCTION_MAP[function_name]
+            result = fn(**function_args)
+
+            context_window.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(result)
+            })
+
+        # Second call to LLM
+        response = client.chat.completions.create(
+            model=os.getenv("MODEL"),
+            messages=context_window
+        )
+
+    assistant_msg = response.choices[0].message.content or ""
+
+    context_window.append({
+        "role": "assistant",
+        "content": assistant_msg
+    })
+
+    print("Assistant:", assistant_msg)

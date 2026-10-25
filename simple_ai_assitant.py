@@ -7,6 +7,8 @@ import json
 
 load_dotenv()
 
+MAX_STEP = 10
+
 client = OpenAI(
     base_url=os.getenv("BASE_URL"),
     api_key=os.getenv("API_KEY")
@@ -32,7 +34,7 @@ You are a friendly, intelligent AI assistant with a chill personality.
 - Avoid repeating information unnecessarily.
 
 Personality: smart friend, relaxed, slightly funny, and helpful.
-Humor level: 2/10.
+Humor level: 5/10.
 
 Be useful, not unnecessarily wordy.
 """
@@ -50,26 +52,37 @@ while True:
         "content": msg
     })
 
-    # First call to LLM
-    response = client.chat.completions.create(
-        model=os.getenv("MODEL"),
-        messages=context_window,
-        tools=TOOLS
-    )
+    # Chained tool calling
+    for STEP in range(MAX_STEP):
 
-    res = response.choices[0].message
+        # Call the LLM
+        response = client.chat.completions.create(
+            model=os.getenv("MODEL"),
+            messages=context_window,
+            tools=TOOLS
+        )
 
-    if res.tool_calls:
+        res = response.choices[0].message
+
+        # No more tool calls: the model has a final response
+        if not res.tool_calls:
+            break
+
         context_window.append(res)
 
         for tool_call in res.tool_calls:
             function_name = tool_call.function.name
-            function_args = json.loads(
-                tool_call.function.arguments or "{}"
-            )
 
-            fn = FUNCTION_NAME_TO_FUNCTION_MAP[function_name]
-            result = fn(**function_args)
+            try:
+                function_args = json.loads(
+                    tool_call.function.arguments or "{}"
+                )
+
+                fn = FUNCTION_NAME_TO_FUNCTION_MAP[function_name]
+                result = fn(**function_args)
+
+            except Exception as e:
+                result = f"Error while running {function_name}: {e}"
 
             context_window.append({
                 "role": "tool",
@@ -77,13 +90,12 @@ while True:
                 "content": str(result)
             })
 
-        # Second call to LLM
-        response = client.chat.completions.create(
-            model=os.getenv("MODEL"),
-            messages=context_window
-        )
+    else:
+        print("Maximum steps reached. Please try again.")
+        continue
 
-    assistant_msg = response.choices[0].message.content or ""
+    # Store and print the final response
+    assistant_msg = res.content or ""
 
     context_window.append({
         "role": "assistant",

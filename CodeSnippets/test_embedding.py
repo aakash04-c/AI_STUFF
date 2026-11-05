@@ -23,3 +23,6 @@ def cosine_similarity( A , B):
     norm_a = num.linalg.norm(A)
     norm_b = num.linalg.norm(B)
     return dot_prod/(norm_a*norm_b)
+
+
+

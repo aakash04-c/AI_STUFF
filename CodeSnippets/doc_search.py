@@ -85,10 +85,8 @@ def test(user_query, documents, top_k=3):
     results = search(user_query, documents, top_k)
 
     for r in results:
-        print(f" {r['score']:.2f} - {r['source']} - {r['size']} characters)")
-    
-    
-
+        print(f" {r['score']:.2f} - {r['source']} - {r['size']} characters)")    
+        
 #Let's start testing
 documents = load_documents()
 documents = add_embeddings(documents)
